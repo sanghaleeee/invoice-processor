@@ -616,6 +616,7 @@ class InvoiceProcessorApp:
                 total_price = 0.0
                 last_output = None
                 file_count = 0
+                file_results = []
 
                 for i, path in enumerate(paths):
                     self.root.after(0, lambda i=i: self._set_status(f"Processing {i+1}/{len(paths)}..."))
@@ -638,15 +639,24 @@ class InvoiceProcessorApp:
                     total_price += sum(it['total_price'] for it in items)
                     last_output = output
                     file_count += 1
+                    # Store individual file result
+                    file_results.append({
+                        'file': os.path.basename(path),
+                        'items': len(items),
+                        'matched': matched,
+                        'qty': sum(it['quantity'] for it in items),
+                        'amt': sum(it['total_price'] for it in items),
+                        'path': output,
+                    })
 
-                self.root.after(0, lambda: self._show_batch_result(
-                    total_items, total_matched, total_qty, total_price, file_count, last_output))
+                self.root.after(0, lambda fr=file_results: self._show_batch_result(
+                    total_items, total_matched, total_qty, total_price, file_count, last_output, fr))
             except Exception as e:
                 self.root.after(0, lambda: self._show_error(str(e)))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _show_batch_result(self, items, matched, qty, amt, files, output_path):
+    def _show_batch_result(self, items, matched, qty, amt, files, output_path, file_results=None):
         self.progress_frame.pack_forget()
         for w in self.result_frame.winfo_children():
             w.destroy()
@@ -658,7 +668,7 @@ class InvoiceProcessorApp:
 
         info_frame = tk.Frame(self.result_frame, bg='#ffffff', highlightbackground='#ddd',
                               highlightthickness=1)
-        info_frame.pack(pady=20, padx=32, fill='x')
+        info_frame.pack(pady=16, padx=32, fill='x')
 
         rows_data = [
             ("📄  Files", f"{files}"),
@@ -669,11 +679,54 @@ class InvoiceProcessorApp:
         ]
         for lbl, val in rows_data:
             row = tk.Frame(info_frame, bg='#ffffff')
-            row.pack(fill='x', padx=16, pady=3)
+            row.pack(fill='x', padx=16, pady=2)
             tk.Label(row, text=lbl, font=('Segoe UI', 10), bg='#ffffff', fg='#888',
                      anchor='w').pack(side='left')
             tk.Label(row, text=val, font=('Segoe UI', 10, 'bold'), bg='#ffffff', fg='#333',
                      anchor='e').pack(side='right')
+
+        # Individual file list
+        if file_results and len(file_results) > 1:
+            list_frame = tk.Frame(self.result_frame, bg='#f0f2f5')
+            list_frame.pack(pady=(8, 0), padx=32, fill='both', expand=True)
+
+            tk.Label(list_frame, text="Individual Results",
+                     font=('Segoe UI', 9, 'bold'), bg='#f0f2f5', fg='#999').pack(anchor='w')
+
+            canvas = tk.Canvas(list_frame, bg='#f0f2f5', highlightthickness=0, height=140)
+            scrollbar = tk.Scrollbar(list_frame, orient='vertical', command=canvas.yview)
+            scroll_frame = tk.Frame(canvas, bg='#ffffff')
+
+            scroll_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+            canvas.create_window((0, 0), window=scroll_frame, anchor='nw', width=canvas.winfo_reqwidth())
+            canvas.configure(yscrollcommand=scrollbar.set)
+
+            for fr in file_results:
+                def make_opener(p=fr['path']):
+                    def open_it():
+                        if sys.platform == 'win32':
+                            os.startfile(p)
+                        else:
+                            subprocess.run(['open', p])
+                    return open_it
+
+                fr_frame = tk.Frame(scroll_frame, bg='#ffffff', highlightbackground='#eee',
+                                    highlightthickness=1)
+                fr_frame.pack(fill='x', padx=4, pady=2)
+
+                tk.Label(fr_frame, text=fr['file'], font=('Segoe UI', 9, 'bold'),
+                         bg='#ffffff', anchor='w').pack(side='left', padx=8, pady=4)
+                tk.Label(fr_frame, text=f"{fr['items']} items · {fr['qty']:,} qty · ${fr['amt']:,.2f}",
+                         font=('Segoe UI', 8), bg='#ffffff', fg='#888',
+                         anchor='w').pack(side='left', padx=(4, 8), pady=4)
+
+                tk.Button(fr_frame, text="Open", font=('Segoe UI', 8),
+                          bg='#e8ecf0', bd=0, padx=8, pady=1, cursor='hand2',
+                          command=make_opener()).pack(side='right', padx=6)
+
+            canvas.pack(side='left', fill='both', expand=True)
+            if len(file_results) > 4:
+                scrollbar.pack(side='right', fill='y')
 
         btn_frame = tk.Frame(self.result_frame, bg='#f0f2f5')
         btn_frame.pack(pady=12)

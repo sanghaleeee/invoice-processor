@@ -219,60 +219,113 @@ struct ContentView: View {
 
     // MARK: - Result
     private func resultView(_ result: ProcessResult) -> some View {
-        VStack(spacing: 20) {
+        let isBatch = result.fileResults.count > 1
+        return VStack(spacing: 16) {
+            // Header
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 44))
+                .font(.system(size: 38))
                 .foregroundStyle(.green)
 
-            VStack(spacing: 10) {
-                summaryRow(icon: "building.storefront", label: "Retailer", value: result.retailerLabel)
+            // Total summary
+            VStack(spacing: 8) {
+                summaryRow(icon: result.fileResults.count > 1 ? "doc.on.doc" : "building.storefront",
+                           label: result.fileResults.count > 1 ? "Files" : "Retailer",
+                           value: result.fileResults.count > 1 ? "\(result.fileResults.count)" : result.retailerLabel)
+                if result.fileResults.count > 1, !result.retailerLabel.isEmpty {
+                    summaryRow(icon: "building.storefront", label: "Retailer", value: result.retailerLabel)
+                }
                 Divider()
-                summaryRow(icon: "number", label: "Items", value: "\(result.itemCount)")
+                summaryRow(icon: "number", label: "Total Items", value: "\(result.itemCount)")
                 summaryRow(icon: "link.badge.plus", label: "SKU Matched", value: "\(result.matchedCount)/\(result.itemCount)")
                 summaryRow(icon: "shippingbox", label: "Total Quantity", value: formattedNumber(result.totalQty))
                 summaryRow(icon: "dollarsign", label: "Total Price USD", value: formattedCurrency(result.totalAmount))
             }
-            .padding(16)
+            .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color(NSColor.controlBackgroundColor))
                     .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
             )
 
-            if let filename = result.filename {
-                HStack(spacing: 8) {
-                    Image(systemName: "doc")
-                        .foregroundStyle(.blue)
-                    Text(filename)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .foregroundStyle(.secondary)
+            // Individual file list (batch mode)
+            if isBatch {
+                fileListView(result.fileResults)
             }
 
+            // Action buttons
             HStack(spacing: 12) {
-                Button(action: openExcel) {
-                    Label("Open Excel", systemImage: "tablecells")
-                        .frame(minWidth: 120)
+                Button(action: openFolder) {
+                    Label("Show in Finder", systemImage: "folder")
+                        .frame(minWidth: 130)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
 
-                Button(action: openFolder) {
-                    Label("Show in Finder", systemImage: "folder")
-                        .frame(minWidth: 120)
-                }
-                .buttonStyle(.bordered)
-
                 Button(action: processAnother) {
                     Label("Process Another", systemImage: "plus")
-                        .frame(minWidth: 120)
+                        .frame(minWidth: 130)
                 }
                 .buttonStyle(.bordered)
             }
             .controlSize(.regular)
         }
+    }
+
+    private func fileListView(_ files: [FileResult]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Individual Results")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 2)
+
+            ScrollView {
+                VStack(spacing: 4) {
+                    ForEach(files) { file in
+                        fileRow(file)
+                    }
+                }
+            }
+            .frame(maxHeight: 180)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(NSColor.controlBackgroundColor).opacity(0.6))
+                .shadow(color: .black.opacity(0.03), radius: 3, y: 1)
+        )
+    }
+
+    private func fileRow(_ file: FileResult) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.filename)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("\(file.itemCount) items · \(formattedNumber(file.totalQty)) qty · \(formattedCurrency(file.totalAmount))")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button("Open") {
+                NSWorkspace.shared.open(URL(fileURLWithPath: file.outputPath))
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.blue)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(4)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
     }
 
     private func summaryRow(icon: String, label: String, value: String) -> some View {
@@ -416,10 +469,13 @@ struct ContentView: View {
             var fileCount = 0
             var firstResult: ProcessResult?
             var lastOutputPath: String?
+            var fileResults: [FileResult] = []
+            var batchRetailer = ""
 
             for (_, url) in urls.enumerated() {
                 DispatchQueue.main.async {
                     self.droppedURL = url
+                    self.isProcessing = true
                 }
                 let (res, _) = runProcessor(pdfPath: url.path)
                 if let res = res {
@@ -429,14 +485,22 @@ struct ContentView: View {
                     totalPrice += res.totalAmount
                     fileCount += 1
                     if firstResult == nil { firstResult = res }
+                    if batchRetailer.isEmpty { batchRetailer = res.retailerLabel }
                     lastOutputPath = res.outputPath
                     DispatchQueue.main.async {
                         self.skuMasterName = loadSkuMasterName()
                     }
-                }
-                // Update progress
-                DispatchQueue.main.async {
-                    self.isProcessing = true
+                    if let path = res.outputPath {
+                        fileResults.append(FileResult(
+                            filename: res.filename ?? url.lastPathComponent,
+                            itemCount: res.itemCount,
+                            matchedCount: res.matchedCount,
+                            totalQty: res.totalQty,
+                            totalAmount: res.totalAmount,
+                            outputPath: path,
+                            retailerLabel: res.retailerLabel
+                        ))
+                    }
                 }
             }
 
@@ -445,9 +509,10 @@ struct ContentView: View {
                 matchedCount: totalMatched,
                 totalQty: totalQty,
                 totalAmount: totalPrice,
-                retailerLabel: "\(fileCount) files",
-                filename: fileCount > 1 ? "\(fileCount) PDFs processed" : firstResult?.filename,
-                outputPath: lastOutputPath
+                retailerLabel: batchRetailer,
+                filename: fileCount > 1 ? "\(fileCount) PDFs" : firstResult?.filename,
+                outputPath: lastOutputPath,
+                fileResults: fileResults
             )
 
             DispatchQueue.main.async {
@@ -537,6 +602,17 @@ func loadSkuMasterName() -> String {
 }
 
 // MARK: - Processor
+struct FileResult: Identifiable {
+    let id = UUID()
+    let filename: String
+    let itemCount: Int
+    let matchedCount: Int
+    let totalQty: Int
+    let totalAmount: Double
+    let outputPath: String
+    let retailerLabel: String
+}
+
 struct ProcessResult {
     let itemCount: Int
     let matchedCount: Int
@@ -545,6 +621,7 @@ struct ProcessResult {
     let retailerLabel: String
     let filename: String?
     let outputPath: String?
+    let fileResults: [FileResult]  // individual file results for batch mode
 }
 
 func runProcessor(pdfPath: String) -> (ProcessResult?, String?) {
@@ -627,7 +704,8 @@ func runProcessor(pdfPath: String) -> (ProcessResult?, String?) {
             totalAmount: totalAmount,
             retailerLabel: retailerLabel,
             filename: filename,
-            outputPath: outputPath
+            outputPath: outputPath,
+            fileResults: []
         ), nil)
     } catch {
         return (nil, error.localizedDescription)
