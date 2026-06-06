@@ -251,6 +251,34 @@ struct ContentView: View {
                 .font(.system(size: 32))
                 .foregroundStyle(.green)
 
+            // Grand total bar
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Total \(result.fileResults.count) files")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Text("\(result.itemCount) items")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text("\(formattedNumber(result.totalQty)) qty")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Text(formattedCurrency(result.totalAmount))
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(NSColor.controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.05), radius: 3, y: 1)
+            )
+
             TabView {
                 ForEach(result.fileResults) { file in
                     singleResultView(result, fileResult: file)
