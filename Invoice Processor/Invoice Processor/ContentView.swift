@@ -706,10 +706,14 @@ func runProcessor(pdfPath: String) -> (ProcessResult?, String?) {
                 totalQty = Int(nums.last ?? "") ?? 0
             }
             if trimmed.contains("총 금액") {
-                let clean = trimmed.replacingOccurrences(of: ",", with: "").replacingOccurrences(of: "$", with: "")
-                let nums = clean.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
-                if let last = nums.last, let val = Double(last) {
-                    totalAmount = val
+                // Extract number: find "$\d+[\d,]*\.?\d*" pattern
+                if let dollarRange = trimmed.range(of: "$") {
+                    let afterDollar = trimmed[dollarRange.upperBound...]
+                    let numStr = afterDollar.trimmingCharacters(in: .whitespaces)
+                    let clean = numStr.replacingOccurrences(of: ",", with: "")
+                    if let val = Double(clean) {
+                        totalAmount = val
+                    }
                 }
             }
             if trimmed.contains("결과:") {
