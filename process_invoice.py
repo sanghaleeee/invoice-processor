@@ -22,7 +22,6 @@ from openpyxl.utils import get_column_letter
 # ─── Config ────────────────────────────────────────────────
 CONFIG_DIR = os.path.expanduser("~/hermes work/po-process")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
-OUTPUT_DIR = os.path.expanduser("~/Desktop")
 
 RETAILER_MAP = {
     'lotte':   {'keywords': ['LOTTE'],                  'label': 'Lotte Code',        'file_key': 'lotte'},
@@ -63,6 +62,38 @@ def resolve_sku_master(cli_path=None):
             return candidates[0][1]
 
     return None
+
+
+def resolve_output_dir(cli_path=None):
+    """출력 디렉토리 결정: CLI 인자 > 설정파일 > ~/Desktop"""
+    if cli_path and os.path.isdir(cli_path):
+        return cli_path
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                cfg = json.load(f)
+            if 'output_dir' in cfg and os.path.isdir(cfg['output_dir']):
+                return cfg['output_dir']
+        except:
+            pass
+    return os.path.expanduser("~/Desktop")
+
+
+def set_output_dir(path):
+    """출력 디렉토리를 config에 저장"""
+    path = os.path.abspath(path)
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg = {}
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                cfg = json.load(f)
+        except:
+            pass
+    cfg['output_dir'] = path
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(cfg, f, indent=2)
+    return path
 
 # ───────────────────────────────────────────────────────────
 
@@ -256,11 +287,12 @@ def lookup_retailer_codes(items, ean_map, retailer_id):
     return items
 
 
-def create_excel(items, pdf_path, retailer_id):
+def create_excel(items, pdf_path, retailer_id, output_dir=None):
     """결과 엑셀 파일 생성"""
+    out_dir = output_dir or resolve_output_dir()
     pdf_basename = os.path.splitext(os.path.basename(pdf_path))[0]
     output_name = f"{pdf_basename}_processed.xlsx"
-    output_path = os.path.join(OUTPUT_DIR, output_name)
+    output_path = os.path.join(out_dir, output_name)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -375,6 +407,7 @@ def main():
     parser = argparse.ArgumentParser(description='Invoice PDF → Excel 변환')
     parser.add_argument('pdf', nargs='?', help='PDF 파일 경로')
     parser.add_argument('--sku-master', help='SKU master 파일 경로 (지정 안하면 config/Downloads 자동 탐색)')
+    parser.add_argument('--output-dir', help='저장 폴더 경로 (기본: ~/Desktop 또는 config 설정)')
     args = parser.parse_args()
 
     pdf_path = args.pdf
@@ -412,11 +445,15 @@ def main():
         print("   SKU master 파일을 앱에 드래그하거나 Downloads 폴더에 넣어주세요.")
         sys.exit(1)
 
+    # 출력 경로 결정
+    output_dir = resolve_output_dir(args.output_dir)
+
     print(f"\n{'='*50}")
     print(f"  Invoice PDF → Excel 변환")
     print(f"{'='*50}")
     print(f"  📁 PDF: {pdf_path}")
     print(f"  📋 SKU: {os.path.basename(sku_master_path)}")
+    print(f"  💾 저장: {output_dir}")
 
     # 1. 배송지 주소 → 리테일러 감지
     retailer_id = detect_retailer(pdf_path)
@@ -434,7 +471,7 @@ def main():
     items = lookup_retailer_codes(items, ean_map, retailer_id)
 
     # 5. 엑셀 생성
-    output_path = create_excel(items, pdf_path, retailer_id)
+    output_path = create_excel(items, pdf_path, retailer_id, output_dir)
 
     # 요약
     total_qty = sum(item['quantity'] for item in items)

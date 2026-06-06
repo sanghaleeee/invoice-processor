@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var errorMessage: String?
     @State private var isTargeted = false
     @State private var skuMasterName: String = loadSkuMasterName()
+    @State private var outputDir: String = loadOutputDir()
     @State private var registerSuccess: String?
 
     var body: some View {
@@ -105,9 +106,20 @@ struct ContentView: View {
             .onTapGesture {
                 selectFile()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .handleDroppedFile)) { notification in
+                if let url = notification.object as? URL {
+                    handleFile(url)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openFileDialog)) { _ in
+                selectFile()
+            }
 
             // SKU master info
             skuMasterInfoView
+
+            // Output dir info
+            outputDirView
         }
     }
 
@@ -148,6 +160,41 @@ struct ContentView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                )
+        )
+    }
+
+    // MARK: - Output Dir
+    private var outputDirView: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "folder")
+                .font(.caption)
+                .foregroundStyle(.orange)
+
+            Text("Save to: \(outputDir)")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer()
+
+            Button("Change...") {
+                selectOutputDir()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.blue)
+            .help("Change output folder")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(NSColor.controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.12), lineWidth: 1)
                 )
         )
     }
@@ -387,6 +434,21 @@ struct ContentView: View {
         registerSkuMaster(url)
     }
 
+    private func selectOutputDir() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.message = "Select output folder for Excel files"
+        panel.prompt = "Save to"
+        panel.directoryURL = URL(fileURLWithPath: outputDir)
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let path = url.path
+        outputDir = path
+        saveOutputDir(path)
+    }
+
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         var urls: [URL] = []
         let group = DispatchGroup()
@@ -414,6 +476,18 @@ struct ContentView: View {
             }
         }
         return true
+    }
+
+    private func handleFile(_ url: URL) {
+        let ext = url.pathExtension.lowercased()
+        switch ext {
+        case "pdf":
+            processPDF(url)
+        case "xlsx":
+            registerSkuMaster(url)
+        default:
+            break
+        }
     }
 
     private func registerSkuMaster(_ url: URL) {
@@ -730,4 +804,28 @@ func formattedCurrency(_ n: Double) -> String {
     formatter.currencyCode = "USD"
     formatter.maximumFractionDigits = 2
     return formatter.string(from: NSNumber(value: n)) ?? "$\(n)"
+}
+
+func loadOutputDir() -> String {
+    let configPath = "\(NSHomeDirectory())/hermes work/po-process/config.json"
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
+          let config = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+          let path = config["output_dir"],
+          FileManager.default.fileExists(atPath: path) else {
+        return "\(NSHomeDirectory())/Desktop"
+    }
+    return path
+}
+
+func saveOutputDir(_ path: String) {
+    let configPath = "\(NSHomeDirectory())/hermes work/po-process/config.json"
+    var config: [String: String] = [:]
+    if let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
+       let existing = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
+        config = existing
+    }
+    config["output_dir"] = path
+    if let data = try? JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted]) {
+        try? data.write(to: URL(fileURLWithPath: configPath))
+    }
 }

@@ -42,7 +42,6 @@ else:
 
 CONFIG_FILE = CONFIG_DIR / 'config.json'
 SKU_STORAGE = CONFIG_DIR / 'sku-master'
-OUTPUT_DIR = DESKTOP
 
 RETAILER_MAP = {
     'lotte':   ('LOTTE', None,                 'Lotte Code'),
@@ -75,6 +74,36 @@ def resolve_sku_master(cli_path=None):
             candidates.sort(reverse=True)
             return candidates[0][1]
     return None
+
+
+def resolve_output_dir(cli_path=None):
+    if cli_path and os.path.isdir(cli_path):
+        return cli_path
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE) as f:
+                cfg = json.load(f)
+            if 'output_dir' in cfg and os.path.isdir(cfg['output_dir']):
+                return cfg['output_dir']
+        except:
+            pass
+    return str(Path.home() / 'Desktop')
+
+
+def set_output_dir(path):
+    path = os.path.abspath(path)
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg = {}
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE) as f:
+                cfg = json.load(f)
+        except:
+            pass
+    cfg['output_dir'] = path
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(cfg, f, indent=2)
+    return path
 
 
 def detect_retailer(pdf_path):
@@ -207,7 +236,7 @@ def parse_invoice_pdf(pdf_path):
     return all_items
 
 
-def create_excel(items, pdf_path, retailer_id):
+def create_excel(items, pdf_path, retailer_id, output_dir=None):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Invoice"
@@ -264,7 +293,8 @@ def create_excel(items, pdf_path, retailer_id):
     ws.auto_filter.ref = f'A1:F{len(items)+1}'
 
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    out = str(OUTPUT_DIR / f'{pdf_name}_processed.xlsx')
+    out_dir = output_dir or resolve_output_dir()
+    out = str(Path(out_dir) / f'{pdf_name}_processed.xlsx')
     wb.save(out)
     return out
 
@@ -336,6 +366,9 @@ class InvoiceProcessorApp:
             return os.path.basename(path)
         return ""
 
+    def _load_output_dir(self):
+        return resolve_output_dir()
+
     def _build_ui(self):
         # ── Header ──
         header = tk.Frame(self.root, bg='#ffffff', height=48)
@@ -397,6 +430,21 @@ class InvoiceProcessorApp:
                   bg='#e8ecf0', activebackground='#d0d4d8', cursor='hand2',
                   command=self._select_sku_master).pack(side='right', padx=(0, 12))
 
+        # ── Output dir bar ──
+        out_bar = tk.Frame(self.root, bg='#f5f6f8', height=26)
+        out_bar.pack(fill='x', side='bottom')
+        out_bar.pack_propagate(False)
+
+        self.output_dir_var = tk.StringVar(value=self._load_output_dir())
+        tk.Label(out_bar, text="💾", font=('Segoe UI', 9), bg='#f5f6f8').pack(side='left', padx=(12, 2))
+        self.out_label = tk.Label(out_bar, textvariable=self.output_dir_var, font=('Segoe UI', 8),
+                                  bg='#f5f6f8', fg='#888', anchor='w')
+        self.out_label.pack(side='left', fill='x', expand=True, padx=(0, 8))
+
+        tk.Button(out_bar, text="Save to...", font=('Segoe UI', 8), bd=0,
+                  bg='#e0e4e8', activebackground='#d0d4d8', cursor='hand2',
+                  command=self._select_output_dir).pack(side='right', padx=(0, 12))
+
         # Status bar
         status_bar = tk.Frame(self.root, bg='#e8ecf0', height=28)
         status_bar.pack(fill='x', side='bottom')
@@ -450,6 +498,15 @@ class InvoiceProcessorApp:
         )
         if path:
             self._register_sku(path)
+
+    def _select_output_dir(self):
+        path = filedialog.askdirectory(
+            title="Select output folder for Excel files",
+            initialdir=self._load_output_dir()
+        )
+        if path:
+            set_output_dir(path)
+            self.output_dir_var.set(path)
 
     def _handle_file(self, path):
         ext = os.path.splitext(path)[1].lower()
@@ -591,7 +648,7 @@ class InvoiceProcessorApp:
                         matched += 1
                     else:
                         item['retailer_code'] = ''
-                output = create_excel(items, path, retailer_id)
+                output = create_excel(items, path, retailer_id, resolve_output_dir())
                 self.root.after(0, lambda: self._show_result(items, matched, retailer_id, output))
             except Exception as e:
                 self.root.after(0, lambda: self._show_error(str(e)))
@@ -631,7 +688,7 @@ class InvoiceProcessorApp:
                             matched += 1
                         else:
                             item['retailer_code'] = ''
-                    output = create_excel(items, path, retailer_id)
+                    output = create_excel(items, path, retailer_id, resolve_output_dir())
                     total_items += len(items)
                     total_matched += matched
                     total_qty += sum(it['quantity'] for it in items)
@@ -789,7 +846,7 @@ if __name__ == '__main__':
                             matched += 1
                         else:
                             item['retailer_code'] = ''
-                    out = create_excel(items, pdf, rid)
+                    out = create_excel(items, pdf, rid, resolve_output_dir())
                     results.append(f"{os.path.basename(pdf)}\n  {len(items)} items, {matched} matched\n  → {os.path.basename(out)}")
         if not pdfs and not xlsx:
             results.append("Unsupported file.\nUse .pdf (invoice) or .xlsx (SKU master)")
