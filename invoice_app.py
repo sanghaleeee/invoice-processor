@@ -338,6 +338,10 @@ class InvoiceProcessorApp:
         self.root.minsize(480, 420)
         self.root.configure(bg='#f0f2f5')
 
+        # Windows: register for file drag-and-drop (shell32 DragAcceptFiles)
+        if sys.platform == 'win32':
+            self._enable_drag_drop()
+
         # Try to set icon
         try:
             self.root.iconbitmap(default='appicon.ico')
@@ -368,6 +372,57 @@ class InvoiceProcessorApp:
 
     def _load_output_dir(self):
         return resolve_output_dir()
+
+    def _enable_drag_drop(self):
+        """Windows: WM_DROPFILES로 파일 드래그 앤 드롭 활성화"""
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+            ctypes.windll.shell32.DragAcceptFiles(hwnd, True)
+
+            # Subclass the window to intercept WM_DROPFILES
+            WM_DROPFILES = 0x0233
+            GWL_WNDPROC = -4
+
+            # Keep reference to prevent garbage collection
+            self._old_wndproc = ctypes.windll.user32.GetWindowLongPtrW(hwnd, GWL_WNDPROC)
+
+            drop_handler = ctypes.CFUNCTYPE(wintypes.LPARAM, wintypes.HWND, wintypes.UINT,
+                                            wintypes.WPARAM, wintypes.LPARAM)
+
+            def wndproc(hWnd, msg, wParam, lParam):
+                if msg == WM_DROPFILES:
+                    hDrop = wParam
+                    buffer = ctypes.create_unicode_buffer(1024)
+                    count = ctypes.windll.shell32.DragQueryFileW(hDrop, 0xFFFFFFFF, None, 0)
+                    paths = []
+                    for i in range(count):
+                        ctypes.windll.shell32.DragQueryFileW(hDrop, i, buffer, len(buffer))
+                        paths.append(buffer.value)
+                    ctypes.windll.shell32.DragFinish(hDrop)
+                    if paths:
+                        self.root.after(0, lambda p=paths: self._handle_dropped_files(p))
+                    return 0
+                return ctypes.windll.user32.CallWindowProcW(
+                    self._old_wndproc, hWnd, msg, wParam, lParam)
+
+            self._drop_proc = drop_handler(wndproc)
+            ctypes.windll.user32.SetWindowLongPtrW(hwnd, GWL_WNDPROC,
+                                                   ctypes.cast(self._drop_proc, ctypes.c_longlong))
+        except Exception as e:
+            print(f"⚠️ Drag-drop init failed: {e}")
+
+    def _handle_dropped_files(self, paths):
+        pdfs = [p for p in paths if p.lower().endswith('.pdf')]
+        xlsx = [p for p in paths if p.lower().endswith('.xlsx')]
+        if xlsx:
+            self._register_sku(xlsx[0])
+        elif len(pdfs) == 1:
+            self._handle_file(pdfs[0])
+        elif len(pdfs) > 1:
+            self._process_batch(pdfs)
 
     def _build_ui(self):
         # ── Header ──
