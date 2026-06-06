@@ -662,20 +662,6 @@ class InvoiceProcessorApp:
         self.result_frame.pack(fill='both', expand=True)
 
         tk.Label(self.result_frame, text="✅", font=('Segoe UI', 36), bg='#f0f2f5').pack(pady=(12, 2))
-        tk.Label(self.result_frame, text=f"{files} Files Processed",
-                 font=('Segoe UI', 16, 'bold'), bg='#f0f2f5', fg='#1a1a2e').pack()
-
-        # Grand total bar
-        total_bar = tk.Frame(self.result_frame, bg='#ffffff', highlightbackground='#ddd',
-                             highlightthickness=1)
-        total_bar.pack(pady=(10, 6), padx=32, fill='x')
-
-        tk.Label(total_bar, text=f"Total {files} files",
-                 font=('Segoe UI', 9), bg='#ffffff', fg='#888').pack(side='left', padx=14, pady=4)
-        tk.Label(total_bar, text=f"{items} items · {qty:,} qty",
-                 font=('Segoe UI', 9), bg='#ffffff', fg='#888').pack(side='left', pady=4)
-        tk.Label(total_bar, text=f"${amt:,.2f}",
-                 font=('Segoe UI', 18, 'bold'), bg='#ffffff', fg='#1a1a2e').pack(side='right', padx=14, pady=4)
 
         # Use Notebook for tabs
         if file_results:
