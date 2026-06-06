@@ -264,8 +264,7 @@ def create_excel(items, pdf_path, retailer_id):
     ws.auto_filter.ref = f'A1:F{len(items)+1}'
 
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    invoice_no = pdf_name.split(' CI')[0] if ' CI' in pdf_name else pdf_name
-    out = str(OUTPUT_DIR / f'{invoice_no}_processed.xlsx')
+    out = str(OUTPUT_DIR / f'{pdf_name}_processed.xlsx')
     wb.save(out)
     return out
 
@@ -666,9 +665,16 @@ class InvoiceProcessorApp:
         tk.Label(self.result_frame, text=f"{files} Files Processed",
                  font=('Segoe UI', 16, 'bold'), bg='#f0f2f5', fg='#1a1a2e').pack()
 
-        info_frame = tk.Frame(self.result_frame, bg='#ffffff', highlightbackground='#ddd',
-                              highlightthickness=1)
-        info_frame.pack(pady=16, padx=32, fill='x')
+        # Use Notebook for tabs
+        notebook = ttk.Notebook(self.result_frame)
+        notebook.pack(pady=16, padx=32, fill='both', expand=True)
+
+        # Summary tab
+        summary_frame = tk.Frame(notebook, bg='#f0f2f5')
+        notebook.add(summary_frame, text="Summary")
+
+        summary_card = tk.Frame(summary_frame, bg='#ffffff', highlightbackground='#ddd', highlightthickness=1)
+        summary_card.pack(pady=16, padx=24, fill='x')
 
         rows_data = [
             ("📄  Files", f"{files}"),
@@ -678,30 +684,40 @@ class InvoiceProcessorApp:
             ("💰  Total Price USD", f"${amt:,.2f}"),
         ]
         for lbl, val in rows_data:
-            row = tk.Frame(info_frame, bg='#ffffff')
-            row.pack(fill='x', padx=16, pady=2)
+            row = tk.Frame(summary_card, bg='#ffffff')
+            row.pack(fill='x', padx=16, pady=3)
             tk.Label(row, text=lbl, font=('Segoe UI', 10), bg='#ffffff', fg='#888',
                      anchor='w').pack(side='left')
             tk.Label(row, text=val, font=('Segoe UI', 10, 'bold'), bg='#ffffff', fg='#333',
                      anchor='e').pack(side='right')
 
-        # Individual file list
-        if file_results and len(file_results) > 1:
-            list_frame = tk.Frame(self.result_frame, bg='#f0f2f5')
-            list_frame.pack(pady=(8, 0), padx=32, fill='both', expand=True)
-
-            tk.Label(list_frame, text="Individual Results",
-                     font=('Segoe UI', 9, 'bold'), bg='#f0f2f5', fg='#999').pack(anchor='w')
-
-            canvas = tk.Canvas(list_frame, bg='#f0f2f5', highlightthickness=0, height=140)
-            scrollbar = tk.Scrollbar(list_frame, orient='vertical', command=canvas.yview)
-            scroll_frame = tk.Frame(canvas, bg='#ffffff')
-
-            scroll_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
-            canvas.create_window((0, 0), window=scroll_frame, anchor='nw', width=canvas.winfo_reqwidth())
-            canvas.configure(yscrollcommand=scrollbar.set)
-
+        # Per-file tabs
+        if file_results:
             for fr in file_results:
+                file_frame = tk.Frame(notebook, bg='#f0f2f5')
+                tab_name = os.path.splitext(fr['file'])[0]
+                if tab_name.endswith(' CI'):
+                    tab_name = tab_name[:-3]
+                notebook.add(file_frame, text=tab_name)
+
+                card = tk.Frame(file_frame, bg='#ffffff', highlightbackground='#ddd', highlightthickness=1)
+                card.pack(pady=16, padx=24, fill='x')
+
+                file_rows = [
+                    ("📄  File", fr['file']),
+                    ("📦  Items", f"{fr['items']}"),
+                    ("🔗  SKU Matched", f"{fr['matched']}/{fr['items']}"),
+                    ("📊  Quantity", f"{fr['qty']:,}"),
+                    ("💰  Total Price USD", f"${fr['amt']:,.2f}"),
+                ]
+                for lbl, val in file_rows:
+                    row = tk.Frame(card, bg='#ffffff')
+                    row.pack(fill='x', padx=16, pady=3)
+                    tk.Label(row, text=lbl, font=('Segoe UI', 10), bg='#ffffff', fg='#888',
+                             anchor='w').pack(side='left')
+                    tk.Label(row, text=val, font=('Segoe UI', 10, 'bold'), bg='#ffffff', fg='#333',
+                             anchor='e').pack(side='right')
+
                 def make_opener(p=fr['path']):
                     def open_it():
                         if sys.platform == 'win32':
@@ -710,23 +726,9 @@ class InvoiceProcessorApp:
                             subprocess.run(['open', p])
                     return open_it
 
-                fr_frame = tk.Frame(scroll_frame, bg='#ffffff', highlightbackground='#eee',
-                                    highlightthickness=1)
-                fr_frame.pack(fill='x', padx=4, pady=2)
-
-                tk.Label(fr_frame, text=fr['file'], font=('Segoe UI', 9, 'bold'),
-                         bg='#ffffff', anchor='w').pack(side='left', padx=8, pady=4)
-                tk.Label(fr_frame, text=f"{fr['items']} items · {fr['qty']:,} qty · ${fr['amt']:,.2f}",
-                         font=('Segoe UI', 8), bg='#ffffff', fg='#888',
-                         anchor='w').pack(side='left', padx=(4, 8), pady=4)
-
-                tk.Button(fr_frame, text="Open", font=('Segoe UI', 8),
-                          bg='#e8ecf0', bd=0, padx=8, pady=1, cursor='hand2',
-                          command=make_opener()).pack(side='right', padx=6)
-
-            canvas.pack(side='left', fill='both', expand=True)
-            if len(file_results) > 4:
-                scrollbar.pack(side='right', fill='y')
+                tk.Button(card, text="📗  Open Excel", font=('Segoe UI', 10, 'bold'),
+                          bg='#2F5496', fg='white', bd=0, padx=16, pady=5, cursor='hand2',
+                          activebackground='#1e3a6e', command=make_opener()).pack(pady=(8, 4))
 
         btn_frame = tk.Frame(self.result_frame, bg='#f0f2f5')
         btn_frame.pack(pady=12)

@@ -220,39 +220,13 @@ struct ContentView: View {
     // MARK: - Result
     private func resultView(_ result: ProcessResult) -> some View {
         let isBatch = result.fileResults.count > 1
-        return VStack(spacing: 16) {
-            // Header
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 38))
-                .foregroundStyle(.green)
-
-            // Total summary
-            VStack(spacing: 8) {
-                summaryRow(icon: result.fileResults.count > 1 ? "doc.on.doc" : "building.storefront",
-                           label: result.fileResults.count > 1 ? "Files" : "Retailer",
-                           value: result.fileResults.count > 1 ? "\(result.fileResults.count)" : result.retailerLabel)
-                if result.fileResults.count > 1, !result.retailerLabel.isEmpty {
-                    summaryRow(icon: "building.storefront", label: "Retailer", value: result.retailerLabel)
-                }
-                Divider()
-                summaryRow(icon: "number", label: "Total Items", value: "\(result.itemCount)")
-                summaryRow(icon: "link.badge.plus", label: "SKU Matched", value: "\(result.matchedCount)/\(result.itemCount)")
-                summaryRow(icon: "shippingbox", label: "Total Quantity", value: formattedNumber(result.totalQty))
-                summaryRow(icon: "dollarsign", label: "Total Price USD", value: formattedCurrency(result.totalAmount))
-            }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(NSColor.controlBackgroundColor))
-                    .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-            )
-
-            // Individual file list (batch mode)
+        return VStack(spacing: 12) {
             if isBatch {
-                fileListView(result.fileResults)
+                batchTabView(result)
+            } else {
+                singleResultView(result, fileResult: nil)
             }
 
-            // Action buttons
             HStack(spacing: 12) {
                 Button(action: openFolder) {
                     Label("Show in Finder", systemImage: "folder")
@@ -271,61 +245,97 @@ struct ContentView: View {
         }
     }
 
-    private func fileListView(_ files: [FileResult]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Individual Results")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 2)
+    private func batchTabView(_ result: ProcessResult) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 32))
+                .foregroundStyle(.green)
 
-            ScrollView {
-                VStack(spacing: 4) {
-                    ForEach(files) { file in
-                        fileRow(file)
+            TabView {
+                // Summary tab
+                singleResultView(result, fileResult: nil)
+                    .tabItem {
+                        Label("Summary", systemImage: "sum")
                     }
+
+                // Per-file tabs
+                ForEach(result.fileResults) { file in
+                    singleResultView(result, fileResult: file)
+                        .tabItem {
+                            Label(shortName(file.filename), systemImage: "doc")
+                        }
                 }
             }
-            .frame(maxHeight: 180)
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(NSColor.controlBackgroundColor).opacity(0.6))
-                .shadow(color: .black.opacity(0.03), radius: 3, y: 1)
-        )
     }
 
-    private func fileRow(_ file: FileResult) -> some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(file.filename)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("\(file.itemCount) items · \(formattedNumber(file.totalQty)) qty · \(formattedCurrency(file.totalAmount))")
-                    .font(.system(size: 10))
+    private func shortName(_ name: String) -> String {
+        // "SG106768248 CI.pdf" → "SG106768248"
+        let trimmed = name.hasSuffix(".pdf") ? String(name.dropLast(4)) : name
+        if trimmed.hasSuffix(" CI") { return String(trimmed.dropLast(3)) }
+        return trimmed
+    }
+
+    private func singleResultView(_ result: ProcessResult, fileResult: FileResult?) -> some View {
+        let isFile = fileResult != nil
+        let fr = fileResult
+
+        return VStack(spacing: 16) {
+            VStack(spacing: 8) {
+                // File name header (only in per-file tabs)
+                if isFile, let name = fr?.filename {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.text")
+                            .foregroundStyle(.blue)
+                            .font(.caption)
+                        Text(name)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                     .foregroundStyle(.secondary)
-            }
+                }
 
-            Spacer()
+                VStack(spacing: 8) {
+                    if isFile {
+                        summaryRow(icon: "building.storefront", label: "Retailer", value: fr?.retailerLabel ?? result.retailerLabel)
+                        Divider()
+                        summaryRow(icon: "number", label: "Items", value: "\(fr?.itemCount ?? result.itemCount)")
+                        summaryRow(icon: "link.badge.plus", label: "SKU Matched", value: "\(fr?.matchedCount ?? result.matchedCount)/\(fr?.itemCount ?? result.itemCount)")
+                        summaryRow(icon: "shippingbox", label: "Quantity", value: formattedNumber(fr?.totalQty ?? result.totalQty))
+                        summaryRow(icon: "dollarsign", label: "Total Price USD", value: formattedCurrency(fr?.totalAmount ?? result.totalAmount))
+                    } else {
+                        summaryRow(icon: "building.storefront", label: "Retailer", value: result.retailerLabel)
+                        if result.fileResults.count > 1 {
+                            summaryRow(icon: "doc.on.doc", label: "Files", value: "\(result.fileResults.count)")
+                        }
+                        Divider()
+                        summaryRow(icon: "number", label: "Total Items", value: "\(result.itemCount)")
+                        summaryRow(icon: "link.badge.plus", label: "SKU Matched", value: "\(result.matchedCount)/\(result.itemCount)")
+                        summaryRow(icon: "shippingbox", label: "Total Quantity", value: formattedNumber(result.totalQty))
+                        summaryRow(icon: "dollarsign", label: "Total Price USD", value: formattedCurrency(result.totalAmount))
+                    }
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color(NSColor.controlBackgroundColor))
+                        .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+                )
 
-            Button("Open") {
-                NSWorkspace.shared.open(URL(fileURLWithPath: file.outputPath))
+                // Open button (per-file)
+                if isFile, let path = fr?.outputPath {
+                    Button(action: { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }) {
+                        Label("Open Excel", systemImage: "tablecells")
+                            .frame(minWidth: 140)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .controlSize(.regular)
+                }
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.blue)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.blue.opacity(0.1))
-            .cornerRadius(4)
+            .padding(.horizontal, 16)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color(NSColor.controlBackgroundColor))
-        )
     }
 
     private func summaryRow(icon: String, label: String, value: String) -> some View {
@@ -688,7 +698,8 @@ func runProcessor(pdfPath: String) -> (ProcessResult?, String?) {
             }
         }
 
-        let filename = URL(fileURLWithPath: pdfPath).lastPathComponent.replacingOccurrences(of: " CI.pdf", with: "")
+        let pdfURL = URL(fileURLWithPath: pdfPath)
+        let filename = pdfURL.lastPathComponent
 
         if let path = outputPath {
             for _ in 0..<10 {

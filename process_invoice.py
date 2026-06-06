@@ -259,8 +259,7 @@ def lookup_retailer_codes(items, ean_map, retailer_id):
 def create_excel(items, pdf_path, retailer_id):
     """결과 엑셀 파일 생성"""
     pdf_basename = os.path.splitext(os.path.basename(pdf_path))[0]
-    invoice_no = pdf_basename.split(' CI')[0] if ' CI' in pdf_basename else pdf_basename
-    output_name = f"{invoice_no}_processed.xlsx"
+    output_name = f"{pdf_basename}_processed.xlsx"
     output_path = os.path.join(OUTPUT_DIR, output_name)
 
     wb = openpyxl.Workbook()
