@@ -763,5 +763,48 @@ if __name__ == '__main__':
         input("\nPress Enter to exit...")
         sys.exit(1)
 
-    app = InvoiceProcessorApp()
-    app.run()
+    # Check for command-line args (drag onto .exe in Windows Explorer)
+    if len(sys.argv) > 1:
+        # Process files directly, show messagebox at end
+        results = []
+        pdfs = [f for f in sys.argv[1:] if f.lower().endswith('.pdf')]
+        xlsx = [f for f in sys.argv[1:] if f.lower().endswith('.xlsx')]
+        if xlsx:
+            name = register_sku_master(xlsx[0])
+            results.append(f"SKU master registered: {name}")
+        if pdfs:
+            sku_path = resolve_sku_master()
+            if not sku_path:
+                results.append("SKU master not found.")
+            else:
+                ean_map = load_sku_master(sku_path)
+                for pdf in pdfs:
+                    rid = detect_retailer(pdf)
+                    items = parse_invoice_pdf(pdf)
+                    matched = 0
+                    for item in items:
+                        ean = item['ean']
+                        if ean in ean_map:
+                            item['retailer_code'] = ean_map[ean][rid]
+                            matched += 1
+                        else:
+                            item['retailer_code'] = ''
+                    out = create_excel(items, pdf, rid)
+                    results.append(f"{os.path.basename(pdf)}\n  {len(items)} items, {matched} matched\n  → {os.path.basename(out)}")
+        if not pdfs and not xlsx:
+            results.append("Unsupported file.\nUse .pdf (invoice) or .xlsx (SKU master)")
+
+        # Show result via tkinter messagebox (works with --windowed)
+        try:
+            import tkinter.messagebox as mb
+            root = tk.Tk()
+            root.withdraw()
+            mb.showinfo("Invoice Processor", "\n\n".join(results))
+            root.destroy()
+        except:
+            print("\n\n".join(results))
+            input("\nPress Enter...")
+        sys.exit(0)
+    else:
+        app = InvoiceProcessorApp()
+        app.run()
