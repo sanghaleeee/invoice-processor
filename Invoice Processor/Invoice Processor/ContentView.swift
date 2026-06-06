@@ -252,13 +252,6 @@ struct ContentView: View {
                 .foregroundStyle(.green)
 
             TabView {
-                // Summary tab
-                singleResultView(result, fileResult: nil)
-                    .tabItem {
-                        Label("Summary", systemImage: "sum")
-                    }
-
-                // Per-file tabs
                 ForEach(result.fileResults) { file in
                     singleResultView(result, fileResult: file)
                         .tabItem {

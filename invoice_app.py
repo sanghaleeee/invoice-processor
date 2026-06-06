@@ -669,29 +669,6 @@ class InvoiceProcessorApp:
         notebook = ttk.Notebook(self.result_frame)
         notebook.pack(pady=16, padx=32, fill='both', expand=True)
 
-        # Summary tab
-        summary_frame = tk.Frame(notebook, bg='#f0f2f5')
-        notebook.add(summary_frame, text="Summary")
-
-        summary_card = tk.Frame(summary_frame, bg='#ffffff', highlightbackground='#ddd', highlightthickness=1)
-        summary_card.pack(pady=16, padx=24, fill='x')
-
-        rows_data = [
-            ("📄  Files", f"{files}"),
-            ("📦  Total Items", f"{items}"),
-            ("🔗  SKU Matched", f"{matched}/{items}"),
-            ("📊  Total Quantity", f"{qty:,}"),
-            ("💰  Total Price USD", f"${amt:,.2f}"),
-        ]
-        for lbl, val in rows_data:
-            row = tk.Frame(summary_card, bg='#ffffff')
-            row.pack(fill='x', padx=16, pady=3)
-            tk.Label(row, text=lbl, font=('Segoe UI', 10), bg='#ffffff', fg='#888',
-                     anchor='w').pack(side='left')
-            tk.Label(row, text=val, font=('Segoe UI', 10, 'bold'), bg='#ffffff', fg='#333',
-                     anchor='e').pack(side='right')
-
-        # Per-file tabs
         if file_results:
             for fr in file_results:
                 file_frame = tk.Frame(notebook, bg='#f0f2f5')
