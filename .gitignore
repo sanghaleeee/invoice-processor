@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.spec
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# Project-specific (contains local paths / actual data)
+config.json
+sku-master/*.xlsx
+
+# Xcode
+Invoice Processor/build/
+Invoice Processor/.build/
+Invoice Processor/*.xcodeproj/
+Invoice Processor/Package.resolved
